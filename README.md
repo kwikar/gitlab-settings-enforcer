@@ -95,7 +95,7 @@ An example SYNC config might look like the following:
   "create_default_branch": true,
   "protected_branches": [
     { "name": "develop", "push_access_level": "maintainer", "merge_access_level": "developer"},
-    { "name": "master", "push_access_level": "maintainer", "merge_access_level": "developer"}
+    { "name": "main", "push_access_level": "maintainer", "merge_access_level": "developer"}
   ],
   "approval_settings": {
     "disable_overriding_approvers_per_merge_request": false,
@@ -150,4 +150,4 @@ An example COMPLIANCE config might look like the following:
     
     Copyright (c) 2019 Scalify GmbH
     Copyright (c) 2019 Eric Rinker
-    Copyright (c) 2020 Libri GmbH
+    Copyright (c) 2020+ Libri GmbH
