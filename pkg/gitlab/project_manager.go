@@ -916,13 +916,19 @@ func (m *ProjectManager) ensureDefaultBranch(project gitlab.Project, dryrun bool
 
 	if !m.config.CreateDefaultBranch ||
 		m.config.ProjectSettings.DefaultBranch == nil ||
-		*m.config.ProjectSettings.DefaultBranch == "master" {
+		*m.config.ProjectSettings.DefaultBranch == "master" ||
+		*m.config.ProjectSettings.DefaultBranch == "main" {
+		return nil
+	}
+
+	branchRef := discoverBranchRef(project, m)
+	if branchRef == nil {
 		return nil
 	}
 
 	opt := &gitlab.CreateBranchOptions{
 		Branch: m.config.ProjectSettings.DefaultBranch,
-		Ref:    gitlab.String("master"),
+		Ref:    branchRef,
 	}
 
 	m.logger.Debugf("Ensuring default branch %s existence ... ", *opt.Branch)
@@ -950,6 +956,21 @@ func (m *ProjectManager) ensureDefaultBranch(project gitlab.Project, dryrun bool
 	}
 
 	return nil
+}
+
+// workaround for either main or master ref
+func discoverBranchRef(project gitlab.Project, m *ProjectManager) *string {
+	branchRef := gitlab.String("main")
+	_, _, err := m.branchesClient.GetBranch(project.ID, *branchRef)
+	if err != nil {
+		branchRef = gitlab.String("master")
+		_, _, err := m.branchesClient.GetBranch(project.ID, *branchRef)
+		if err != nil {
+			m.logger.Debugf("Ensuring default branch ref existence ... neither main nor master exists!")
+			return nil
+		}
+	}
+	return branchRef
 }
 
 // willChangeApprovalSettings takes two ProjectSettings, and confirms if the 2nd one changes the 1st
