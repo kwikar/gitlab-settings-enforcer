@@ -38,8 +38,13 @@ var syncCmd = &cobra.Command{
 		for index, project := range projects {
 			logger.Infof("Processing project #%d: %s", index+1, project.PathWithNamespace)
 
+			if err := manager.EnsureDefaultBranch(project, env.Dryrun); err != nil {
+				logger.Errorf("failed to ensure default branch of repo %v: %v", project.PathWithNamespace, err)
+				manager.SetError(true)
+			}
+
 			// Update branches
-			if err := manager.EnsureBranchesAndProtection(project, env.Dryrun); err != nil {
+			if err := manager.EnsureBranchProtection(project, env.Dryrun); err != nil {
 				logger.Errorf("failed to ensure branches of repo %v: %v", project.PathWithNamespace, err)
 				manager.SetError(true)
 			}

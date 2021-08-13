@@ -78,27 +78,29 @@ func (m *ProjectManager) ComplianceReady() bool {
 	return true
 }
 
-// EnsureBranchesAndProtection ensures that
-//  1) the default branch exists
-//  2) all of the protected branches are configured correctly
-func (m *ProjectManager) EnsureBranchesAndProtection(project gitlab.Project, dryrun bool) error {
-	if err := m.ensureDefaultBranch(project, dryrun); err != nil {
-		return err
-	}
+type errorList []error
 
-	branchesWithError := []string{}
+func (l errorList) Error() string {
+	sl := make([]string, len(l))
+	for i, e := range l {
+		sl[i] = e.Error()
+	}
+	return strings.Join(sl, ",")
+}
+
+func (m *ProjectManager) EnsureBranchProtection(project gitlab.Project, dryrun bool) error {
+	branchesWithError := errorList{}
 
 	for _, b := range m.config.ProtectedBranches {
 		protectedBranch, _, err := m.protectedBranchesClient.GetProtectedBranch(project.ID, b.Name)
 		if err != nil {
 			m.logger.Warnf("failed to get protected branch %v: %v", b.Name, err)
 			continue
-		} else {
-			if protectedBranch != nil &&
-				compareAccessLevels(protectedBranch.MergeAccessLevels, b.MergeAccessLevel) &&
-				compareAccessLevels(protectedBranch.PushAccessLevels, b.PushAccessLevel) {
-				continue
-			}
+		}
+		if protectedBranch != nil &&
+			compareAccessLevels(protectedBranch.MergeAccessLevels, b.MergeAccessLevel) &&
+			compareAccessLevels(protectedBranch.PushAccessLevels, b.PushAccessLevel) {
+			continue
 		}
 
 		if dryrun {
@@ -110,7 +112,7 @@ func (m *ProjectManager) EnsureBranchesAndProtection(project gitlab.Project, dry
 		// Remove protections (if present)
 		if resp, err := m.protectedBranchesClient.UnprotectRepositoryBranches(project.ID, b.Name); err != nil &&
 			(resp == nil || resp.StatusCode != http.StatusNotFound) {
-			branchesWithError = append(branchesWithError, fmt.Sprintf("%s: %v", b.Name, err))
+			branchesWithError = append(branchesWithError, fmt.Errorf("%s: %w", b.Name, err))
 			continue
 		}
 
@@ -122,13 +124,13 @@ func (m *ProjectManager) EnsureBranchesAndProtection(project gitlab.Project, dry
 
 		// (Re)add protections
 		if _, _, err := m.protectedBranchesClient.ProtectRepositoryBranches(project.ID, opt); err != nil {
-			branchesWithError = append(branchesWithError, fmt.Sprintf("%s: %v", b.Name, err))
+			branchesWithError = append(branchesWithError, fmt.Errorf("%s: %w", b.Name, err))
 			continue
 		}
 	}
 
 	if len(branchesWithError) > 0 {
-		return fmt.Errorf("failed to protect branches: %s", strings.Join(branchesWithError, ","))
+		return fmt.Errorf("failed to protect branches: %w", branchesWithError)
 	}
 
 	return nil
@@ -921,7 +923,7 @@ func (m *ProjectManager) debugPrintProjectSettings(settings map[string]*gitlab.P
 	return nil
 }
 
-func (m *ProjectManager) ensureDefaultBranch(project gitlab.Project, dryrun bool) error {
+func (m *ProjectManager) EnsureDefaultBranch(project gitlab.Project, dryrun bool) error {
 
 	if !m.config.CreateDefaultBranch ||
 		m.config.ProjectSettings.DefaultBranch == nil ||
