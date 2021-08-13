@@ -86,10 +86,13 @@ func (m *ProjectManager) EnsureBranchesAndProtection(project gitlab.Project, dry
 		return err
 	}
 
+	branchesWithError := []string{}
+
 	for _, b := range m.config.ProtectedBranches {
 		protectedBranch, _, err := m.protectedBranchesClient.GetProtectedBranch(project.ID, b.Name)
 		if err != nil {
 			m.logger.Warnf("failed to get protected branch %v: %v", b.Name, err)
+			continue
 		} else {
 			if protectedBranch != nil &&
 				compareAccessLevels(protectedBranch.MergeAccessLevels, b.MergeAccessLevel) &&
@@ -107,7 +110,8 @@ func (m *ProjectManager) EnsureBranchesAndProtection(project gitlab.Project, dry
 		// Remove protections (if present)
 		if resp, err := m.protectedBranchesClient.UnprotectRepositoryBranches(project.ID, b.Name); err != nil &&
 			(resp == nil || resp.StatusCode != http.StatusNotFound) {
-			return fmt.Errorf("failed to unprotect branch %v before protection: %v", b.Name, err)
+			branchesWithError = append(branchesWithError, fmt.Sprintf("%s: %v", b.Name, err))
+			continue
 		}
 
 		opt := &gitlab.ProtectRepositoryBranchesOptions{
@@ -118,8 +122,13 @@ func (m *ProjectManager) EnsureBranchesAndProtection(project gitlab.Project, dry
 
 		// (Re)add protections
 		if _, _, err := m.protectedBranchesClient.ProtectRepositoryBranches(project.ID, opt); err != nil {
-			return fmt.Errorf("failed to protect branch %s: %v", b.Name, err)
+			branchesWithError = append(branchesWithError, fmt.Sprintf("%s: %v", b.Name, err))
+			continue
 		}
+	}
+
+	if len(branchesWithError) > 0 {
+		return fmt.Errorf("failed to protect branches: %s", strings.Join(branchesWithError, ","))
 	}
 
 	return nil
