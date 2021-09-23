@@ -92,30 +92,38 @@ func (m *ProjectManager) EnsureBranchProtection(project gitlab.Project, dryrun b
 	branchesWithError := errorList{}
 
 	for _, b := range m.config.ProtectedBranches {
-		protectedBranch, _, err := m.protectedBranchesClient.GetProtectedBranch(project.ID, b.Name)
-		if err != nil {
-			m.logger.Warnf("failed to get protected branch %v: %v", b.Name, err)
-			continue
-		}
-		if protectedBranch != nil &&
-			compareAccessLevels(protectedBranch.MergeAccessLevels, b.MergeAccessLevel) &&
-			compareAccessLevels(protectedBranch.PushAccessLevels, b.PushAccessLevel) {
-			continue
-		}
-
-		if dryrun {
-			m.logger.Infof("DRYRUN: Skipped executing API call [UnprotectRepositoryBranches] on %v branch.", b.Name)
-			m.logger.Infof("DRYRUN: Skipped executing API call [ProtectRepositoryBranches] on %v branch.", b.Name)
-			continue
-		}
-
-		// Remove protections (if present)
-		if resp, err := m.protectedBranchesClient.UnprotectRepositoryBranches(project.ID, b.Name); err != nil &&
-			(resp == nil || resp.StatusCode != http.StatusNotFound) {
+		_, resp, err := m.branchesClient.GetBranch(project.ID, b.Name)
+		if err != nil && resp == nil {
+			m.logger.Warnf("get branch with error %v: %v", b.Name, err)
 			branchesWithError = append(branchesWithError, fmt.Errorf("%s: %w", b.Name, err))
 			continue
 		}
+		if err != nil && resp.StatusCode == http.StatusNotFound {
+			m.logger.Infof("branch does not exist %v: %v", b.Name, err)
+			continue
+		}
+		protectedBranch, _, err := m.protectedBranchesClient.GetProtectedBranch(project.ID, b.Name)
+		if err == nil {
+			if protectedBranch != nil &&
+				compareAccessLevels(protectedBranch.MergeAccessLevels, b.MergeAccessLevel) &&
+				compareAccessLevels(protectedBranch.PushAccessLevels, b.PushAccessLevel) {
+				continue
+			}
 
+			if dryrun {
+				m.logger.Infof("DRYRUN: Skipped executing API call [UnprotectRepositoryBranches] on %v branch.", b.Name)
+				m.logger.Infof("DRYRUN: Skipped executing API call [ProtectRepositoryBranches] on %v branch.", b.Name)
+				continue
+			}
+
+			// Remove protections (if present)
+			if resp, err := m.protectedBranchesClient.UnprotectRepositoryBranches(project.ID, b.Name); err != nil &&
+				(resp == nil || resp.StatusCode != http.StatusNotFound) {
+				branchesWithError = append(branchesWithError, fmt.Errorf("%s: %w", b.Name, err))
+				continue
+			}
+
+		}
 		opt := &gitlab.ProtectRepositoryBranchesOptions{
 			Name:             gitlab.String(b.Name),
 			PushAccessLevel:  b.PushAccessLevel.Value(),
