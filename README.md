@@ -43,6 +43,7 @@ providing a Config object. The config object has the following fields:
 | `approval_settings`     | Object            | no       | The gitlab project approval settings to change. [Possible keys](https://docs.gitlab.com/ee/api/merge_request_approvals.html#change-configuration) |         |
 | `project_settings`      | Object            | no       | The gitlab project settings to change. [Possible keys](https://docs.gitlab.com/ce/api/projects.html#edit-project) |         |
 | `compliance`            | Object            | no       | The compliance configuration.                                                                                    |         |
+| `push_rules`            | Object            | no       | The gitlab project push rules settings to change. [Possible keys](https://docs.gitlab.com/ee/api/projects.html#edit-project-push-rule) |         |                                                                                 |         |
 
 `ProtectedBranch` 
 

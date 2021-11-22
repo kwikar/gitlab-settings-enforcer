@@ -34,6 +34,8 @@ type ProjectManager struct {
 	ApprovalSettingsUpdated  map[string]*gitlab.ProjectApprovals
 	ProjectSettingsOriginal  map[string]*gitlab.Project
 	ProjectSettingsUpdated   map[string]*gitlab.Project
+	PushRulesOriginal        map[string]*gitlab.ProjectPushRules
+	PushRulesUpdated         map[string]*gitlab.ProjectPushRules
 }
 
 // NewProjectManager returns a new ProjectManager instance
@@ -58,6 +60,8 @@ func NewProjectManager(
 		ApprovalSettingsUpdated:  make(map[string]*gitlab.ProjectApprovals),
 		ProjectSettingsOriginal:  make(map[string]*gitlab.Project),
 		ProjectSettingsUpdated:   make(map[string]*gitlab.Project),
+		PushRulesOriginal:        make(map[string]*gitlab.ProjectPushRules),
+		PushRulesUpdated:         make(map[string]*gitlab.ProjectPushRules),
 	}
 }
 
@@ -208,11 +212,17 @@ func (m *ProjectManager) GenerateChangeLogReport() error {
 	if err != nil {
 		panic(err)
 	}
+	pushRulesDifflog, err := diff.Diff(m.PushRulesOriginal, m.PushRulesUpdated)
+	if err != nil {
+		panic(err)
+	}
 
 	m.logger.Debugf("---[ Approval Diff Log ]---")
 	m.logger.Debugf("%+v\n", approvalDifflog)
 	m.logger.Debugf("---[ Project Diff Log ]---")
 	m.logger.Debugf("%+v\n", projectDifflog)
+	m.logger.Debugf("---[ PushRules Diff Log ]---")
+	m.logger.Debugf("%+v\n", pushRulesDifflog)
 
 	changelog := make(map[string]map[string]map[string]map[string]interface{})
 
@@ -248,6 +258,23 @@ func (m *ProjectManager) GenerateChangeLogReport() error {
 		changelog[v.Path[0]]["project_settings"][setting_name] = make(map[string]interface{})
 		changelog[v.Path[0]]["project_settings"][setting_name]["From"] = v.From
 		changelog[v.Path[0]]["project_settings"][setting_name]["To"] = v.To
+	}
+
+	// Process PushRules
+	m.logger.Debugf("Process Push Rules Diff Log")
+	for _, v := range pushRulesDifflog {
+		// If REPO doesn't exist in map, make it.
+		if _, ok := changelog[v.Path[0]]; !ok {
+			changelog[v.Path[0]] = make(map[string]map[string]map[string]interface{})
+		}
+		if _, ok := changelog[v.Path[0]]["push_rules"]; !ok {
+			changelog[v.Path[0]]["push_rules"] = make(map[string]map[string]interface{})
+		}
+
+		setting_name := strcase.ToSnake(v.Path[len(v.Path)-1])
+		changelog[v.Path[0]]["push_rules"][setting_name] = make(map[string]interface{})
+		changelog[v.Path[0]]["push_rules"][setting_name]["From"] = v.From
+		changelog[v.Path[0]]["push_rules"][setting_name]["To"] = v.To
 	}
 
 	// Output Raw JSON
@@ -848,6 +875,82 @@ func (m *ProjectManager) UpdateProjectSettings(project gitlab.Project, dryrun bo
 	return nil
 }
 
+func (m *ProjectManager) EditPushRules(project gitlab.Project, dryrun bool) error {
+
+	// Get current settings states
+	pushRules, _, err := m.projectsClient.GetProjectPushRules(project.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get current pus rules of project %s: %v", project.PathWithNamespace, err)
+	}
+
+	// Record current settings states
+	m.PushRulesOriginal[project.PathWithNamespace] = pushRules
+
+	if m.config.PushRules == nil {
+		m.logger.Debugf("No push_rules section provided in config")
+
+		defaultRules := new(gitlab.ProjectPushRules)
+
+		// revert to default push rule if config is empty but rule exists on server or cancel processing if rules does not exists on server
+		if m.willChangePushRules(pushRules, defaultRules) {
+			// revert to default push rule
+			convertedRules, err := m.convertPushRulesToEditPushRulesOptions(*defaultRules)
+			m.config.PushRules = &convertedRules
+
+			if err != nil {
+				return err
+			}
+		} else {
+			// cancel processing if existing push rule is default push rule
+			m.logger.Debugf("No action required.")
+
+			// Record current settings states
+			m.PushRulesUpdated[project.PathWithNamespace] = pushRules
+
+			return nil
+		}
+
+	} else {
+
+		rulesToChange, err := m.convertEditPushRulesOptionsToPushRules(*m.config.PushRules)
+		if err != nil {
+			return err
+		}
+
+		// cancel processing if there is no changes
+		if !m.willChangePushRules(pushRules, &rulesToChange) {
+			m.logger.Debugf("No action required.")
+
+			// Record current settings states
+			m.PushRulesUpdated[project.PathWithNamespace] = pushRules
+
+			return nil
+		}
+	}
+
+	if dryrun {
+		m.logger.Infof("DRYRUN: Skipped executing API call [EditProjectPushRule]")
+	} else {
+
+		// edit push rules if exists already
+		_, _, err := m.projectsClient.EditProjectPushRule(project.ID, m.config.PushRules)
+
+		if err != nil {
+			return fmt.Errorf("failed to update push rules of project %s: %v", project.PathWithNamespace, err)
+		}
+	}
+
+	// Record new settings states
+	newPushRules, _, err := m.projectsClient.GetProjectPushRules(project.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get current pus rules of project %s: %v", project.PathWithNamespace, err)
+	}
+
+	m.PushRulesUpdated[project.PathWithNamespace] = newPushRules
+
+	return nil
+}
+
 /**********************
  * Internal Functions *
  **********************/
@@ -880,6 +983,38 @@ func (m *ProjectManager) convertEditProjectOptionsToProject(current gitlab.EditP
 	err = json.Unmarshal(jsonData, &returnValue)
 	if err != nil {
 		return gitlab.Project{}, fmt.Errorf("failed to convert json to Project struct: %v", err)
+	}
+
+	return returnValue, nil
+}
+
+// convertEditProjectPushRulesOptionsToPushRules
+func (m *ProjectManager) convertEditPushRulesOptionsToPushRules(current gitlab.EditProjectPushRuleOptions) (gitlab.ProjectPushRules, error) {
+	jsonData, err := json.Marshal(current)
+	if err != nil {
+		return gitlab.ProjectPushRules{}, fmt.Errorf("failed to convert EditProjectPushRuleOptions to json: %v", err)
+	}
+
+	var returnValue gitlab.ProjectPushRules
+	err = json.Unmarshal(jsonData, &returnValue)
+	if err != nil {
+		return gitlab.ProjectPushRules{}, fmt.Errorf("failed to convert json to ProjectPushRules struct: %v", err)
+	}
+
+	return returnValue, nil
+}
+
+// convertPushRulesToEditProjectPushRulesOptions
+func (m *ProjectManager) convertPushRulesToEditPushRulesOptions(current gitlab.ProjectPushRules) (gitlab.EditProjectPushRuleOptions, error) {
+	jsonData, err := json.Marshal(current)
+	if err != nil {
+		return gitlab.EditProjectPushRuleOptions{}, fmt.Errorf("failed to convert ProjectPushRules to json: %v", err)
+	}
+
+	var returnValue gitlab.EditProjectPushRuleOptions
+	err = json.Unmarshal(jsonData, &returnValue)
+	if err != nil {
+		return gitlab.EditProjectPushRuleOptions{}, fmt.Errorf("failed to convert json to EditProjectPushRuleOptions struct: %v", err)
 	}
 
 	return returnValue, nil
@@ -1010,6 +1145,22 @@ func (m *ProjectManager) willChangeApprovalSettings(current *gitlab.ProjectAppro
 
 // willChangeProjectSettings takes two ProjectSettings, and confirms if the 2nd one changes the 1st
 func (m *ProjectManager) willChangeProjectSettings(current *gitlab.Project, changes *gitlab.Project) bool {
+	changelog, _ := diff.Diff(current, changes)
+
+	changeExpected := false
+	m.logger.Debugf("%v", changelog)
+
+	for _, change := range changelog {
+		if change.Type == "update" {
+			changeExpected = true
+		}
+	}
+
+	return changeExpected
+}
+
+// willChangePushRules takes two PushRules, and confirms if the 2nd one changes the 1st
+func (m *ProjectManager) willChangePushRules(current *gitlab.ProjectPushRules, changes *gitlab.ProjectPushRules) bool {
 	changelog, _ := diff.Diff(current, changes)
 
 	changeExpected := false
