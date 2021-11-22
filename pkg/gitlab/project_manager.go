@@ -886,7 +886,7 @@ func (m *ProjectManager) EditPushRules(project gitlab.Project, dryrun bool) erro
 	// Get current settings states
 	pushRules, _, err := m.projectsClient.GetProjectPushRules(project.ID)
 	if err != nil {
-		return fmt.Errorf("failed to get current pus rules of project %s: %v", project.PathWithNamespace, err)
+		return fmt.Errorf("failed to get current push rules of project %s: %v", project.PathWithNamespace, err)
 	}
 
 	// Record original settings states
@@ -911,7 +911,7 @@ func (m *ProjectManager) EditPushRules(project gitlab.Project, dryrun bool) erro
 		m.logger.Infof("DRYRUN: Skipped executing API call [EditProjectPushRule]")
 	} else {
 
-		// edit push rules if exists already
+		// edit push rules
 		_, _, err := m.projectsClient.EditProjectPushRule(project.ID, m.config.PushRules)
 
 		if err != nil {
@@ -922,7 +922,7 @@ func (m *ProjectManager) EditPushRules(project gitlab.Project, dryrun bool) erro
 	// Record new settings states
 	newPushRules, _, err := m.projectsClient.GetProjectPushRules(project.ID)
 	if err != nil {
-		return fmt.Errorf("failed to get current pus rules of project %s: %v", project.PathWithNamespace, err)
+		return fmt.Errorf("failed to get current push rules of project %s: %v", project.PathWithNamespace, err)
 	}
 
 	m.PushRulesUpdated[project.PathWithNamespace] = newPushRules
