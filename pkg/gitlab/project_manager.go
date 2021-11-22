@@ -877,55 +877,34 @@ func (m *ProjectManager) UpdateProjectSettings(project gitlab.Project, dryrun bo
 
 func (m *ProjectManager) EditPushRules(project gitlab.Project, dryrun bool) error {
 
+	// Exit if nothing to configure.
+	if m.config.PushRules == nil {
+		m.logger.Debugf("No push_rules section provided in config")
+		return nil
+	}
+
 	// Get current settings states
 	pushRules, _, err := m.projectsClient.GetProjectPushRules(project.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get current pus rules of project %s: %v", project.PathWithNamespace, err)
 	}
 
-	// Record current settings states
+	// Record original settings states
 	m.PushRulesOriginal[project.PathWithNamespace] = pushRules
 
-	if m.config.PushRules == nil {
-		m.logger.Debugf("No push_rules section provided in config")
+	rulesToChange, err := m.convertEditPushRulesOptionsToPushRules(*m.config.PushRules)
+	if err != nil {
+		return err
+	}
 
-		defaultRules := new(gitlab.ProjectPushRules)
+	// cancel processing if there is no changes
+	if !m.willChangePushRules(pushRules, &rulesToChange) {
+		m.logger.Debugf("No action required.")
 
-		// revert to default push rule if config is empty but rule exists on server or cancel processing if rules does not exists on server
-		if m.willChangePushRules(pushRules, defaultRules) {
-			// revert to default push rule
-			convertedRules, err := m.convertPushRulesToEditPushRulesOptions(*defaultRules)
-			m.config.PushRules = &convertedRules
+		// Record current settings states
+		m.PushRulesUpdated[project.PathWithNamespace] = pushRules
 
-			if err != nil {
-				return err
-			}
-		} else {
-			// cancel processing if existing push rule is default push rule
-			m.logger.Debugf("No action required.")
-
-			// Record current settings states
-			m.PushRulesUpdated[project.PathWithNamespace] = pushRules
-
-			return nil
-		}
-
-	} else {
-
-		rulesToChange, err := m.convertEditPushRulesOptionsToPushRules(*m.config.PushRules)
-		if err != nil {
-			return err
-		}
-
-		// cancel processing if there is no changes
-		if !m.willChangePushRules(pushRules, &rulesToChange) {
-			m.logger.Debugf("No action required.")
-
-			// Record current settings states
-			m.PushRulesUpdated[project.PathWithNamespace] = pushRules
-
-			return nil
-		}
+		return nil
 	}
 
 	if dryrun {
@@ -999,22 +978,6 @@ func (m *ProjectManager) convertEditPushRulesOptionsToPushRules(current gitlab.E
 	err = json.Unmarshal(jsonData, &returnValue)
 	if err != nil {
 		return gitlab.ProjectPushRules{}, fmt.Errorf("failed to convert json to ProjectPushRules struct: %v", err)
-	}
-
-	return returnValue, nil
-}
-
-// convertPushRulesToEditProjectPushRulesOptions
-func (m *ProjectManager) convertPushRulesToEditPushRulesOptions(current gitlab.ProjectPushRules) (gitlab.EditProjectPushRuleOptions, error) {
-	jsonData, err := json.Marshal(current)
-	if err != nil {
-		return gitlab.EditProjectPushRuleOptions{}, fmt.Errorf("failed to convert ProjectPushRules to json: %v", err)
-	}
-
-	var returnValue gitlab.EditProjectPushRuleOptions
-	err = json.Unmarshal(jsonData, &returnValue)
-	if err != nil {
-		return gitlab.EditProjectPushRuleOptions{}, fmt.Errorf("failed to convert json to EditProjectPushRuleOptions struct: %v", err)
 	}
 
 	return returnValue, nil
