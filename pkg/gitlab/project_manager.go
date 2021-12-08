@@ -558,35 +558,13 @@ func (m *ProjectManager) GetProjects() ([]gitlab.Project, error) {
 
 	m.logger.Debugf("Fetching projects under %s path ...", m.config.GroupName)
 
-	// Identify Group/Subgroup's ID
-	var groupID int
-
-	m.logger.Debugf("Identifying %s's GroupID", m.config.GroupName)
-	if strings.ContainsAny(m.config.GroupName, "/") {
-		// Nested Path
-		group_ID, err := m.GetSubgroupID(m.config.GroupName, 1, 0)
-		if err != nil {
-			return []gitlab.Project{}, fmt.Errorf("failed to fetch GitLab group info for %q: %v", m.config.GroupName, err)
-		}
-		groupID = group_ID
-	} else {
-		// BugFix: Without this pre-processing, go-gitlab library stalls.
-		var groupName = strings.Replace(url.PathEscape(m.config.GroupName), ".", "%2E", -1)
-		group, _, err := m.groupsClient.GetGroup(groupName, &gitlab.GetGroupOptions{})
-		if err != nil {
-			return []gitlab.Project{}, fmt.Errorf("failed to fetch GitLab group info for %q: %v", groupName, err)
-		}
-		groupID = group.ID
-	}
-
-	m.logger.Debugf("GroupID is %d", groupID)
 	listGroupProjectOps.IncludeSubgroups = gitlab.Bool(m.config.IncludeSubgroups)
 
 	// Get Project objects
 	for {
-		projects, resp, err := m.groupsClient.ListGroupProjects(groupID, listGroupProjectOps)
+		projects, resp, err := m.groupsClient.ListGroupProjects(m.config.GroupName, listGroupProjectOps)
 		if err != nil {
-			return []gitlab.Project{}, fmt.Errorf("failed to fetch GitLab projects for %s [%d]: %v", m.config.GroupName, groupID, err)
+			return []gitlab.Project{}, fmt.Errorf("failed to fetch GitLab projects for %s: %v", m.config.GroupName, err)
 		}
 
 		for _, p := range projects {
