@@ -572,7 +572,7 @@ func (m *ProjectManager) GetProjects() ([]gitlab.Project, error) {
 	} else {
 		// BugFix: Without this pre-processing, go-gitlab library stalls.
 		var groupName = strings.Replace(url.PathEscape(m.config.GroupName), ".", "%2E", -1)
-		group, _, err := m.groupsClient.GetGroup(groupName)
+		group, _, err := m.groupsClient.GetGroup(groupName, &gitlab.GetGroupOptions{})
 		if err != nil {
 			return []gitlab.Project{}, fmt.Errorf("failed to fetch GitLab group info for %q: %v", groupName, err)
 		}

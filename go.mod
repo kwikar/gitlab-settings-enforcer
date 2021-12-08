@@ -12,7 +12,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0 // indirect
-	github.com/xanzy/go-gitlab v0.50.2
+	github.com/xanzy/go-gitlab v0.52.2
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/oauth2 v0.0.0-20210805134026-6f1e6394065a // indirect
 	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e // indirect

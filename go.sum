@@ -250,6 +250,8 @@ github.com/xanzy/go-gitlab v0.39.0 h1:7aiZ03fJfCdqoHFhsZq/SoVYp2lR91hfYWmiXLOU5Q
 github.com/xanzy/go-gitlab v0.39.0/go.mod h1:sPLojNBn68fMUWSxIJtdVVIP8uSBYqesTfDUseX11Ug=
 github.com/xanzy/go-gitlab v0.50.2 h1:Qm/um2Jryuqusc6VmN7iZYVTQVzNynzSiuMJDnCU1wE=
 github.com/xanzy/go-gitlab v0.50.2/go.mod h1:Q+hQhV508bDPoBijv7YjK/Lvlb4PhVhJdKqXVQrUoAE=
+github.com/xanzy/go-gitlab v0.52.2 h1:gkgg1z4ON70sphibtD86Bfmt1qV3mZ0pU0CBBCFAEvQ=
+github.com/xanzy/go-gitlab v0.52.2/go.mod h1:Q+hQhV508bDPoBijv7YjK/Lvlb4PhVhJdKqXVQrUoAE=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
