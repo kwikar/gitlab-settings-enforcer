@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/smtp"
-	"net/url"
 	"reflect"
 	"regexp"
 	"sort"
